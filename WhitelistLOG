@@ -1,0 +1,2 @@
+writefile("Logs.txt", "Chronos Workspace Logs: HWID Whitelisted, ")
+print(readfile("Logs.txt")) --> Hello, world!
