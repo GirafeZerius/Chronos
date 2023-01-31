@@ -1,0 +1,6 @@
+game.StarterGui:SetCore("SendNotification", {
+Title = "Notification"; 
+Text = "Chronos Loaded";
+Icon = "http://www.roblox.com/asset/?id=2022095747"; 
+Duration = 10; 
+})
