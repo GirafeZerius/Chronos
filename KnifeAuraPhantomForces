@@ -1,0 +1,170 @@
+_G.KnifeAura={
+    Enabled=true,--true,false  enables or disables the script
+    Range=30,--0-30  distance that the knife aura activates
+    Auto_Stab=true,--true,false  automaticly stabs the player when they come in range
+}
+if _G.PFKA then return else _G.PFKA="phantom forces anti cheat is hard to bypass"end
+local IsAlive=function()--check if player is alive
+    if game.Players.LocalPlayer.Character and not game.Workspace:FindFirstChild("MenuLobby")then--if we exist and we are not in the lobby
+        return true
+    end
+    return false
+end
+local Melees={"ONE HAND BLUNT","TWO HAND BLADE","ONE HAND BLADE","TWO HAND BLUNT"}--knife folder names
+local weapondata={}--my shitty gun detection (it works fuck u)
+for _,v in pairs(game:GetService("ReplicatedStorage").Content.ProductionContent.WeaponDatabase:GetChildren())do
+    if table.find(Melees,v.Name)then
+        for _,c in pairs(v:GetChildren())do
+            if c:FindFirstChild("Main")then
+                weapondata[c.Name]={Union={},MeshPart={}}
+                for _,x in pairs(c.Main:GetChildren())do
+                    if x:IsA("MeshPart")then
+                        weapondata[c.Name].MeshPart[x.MeshId]=x.MeshId
+                    elseif x:IsA("Union")then
+                        weapondata[c.Name].Union[x.AssetId]=x.AssetId
+                    end
+                end
+            end
+        end
+    end
+end
+local GetKnifeName=function()--get weapon from closest model from camera?! omg shut up ik its stupid but it works quit bullying me
+    if not IsAlive()then return"None"end
+    local curdata={Union={},MeshPart={}}
+    for _,v in pairs(game.Workspace.CurrentCamera.Main:GetChildren())do
+        if v:IsA("MeshPart")then
+            curdata.MeshPart[v.MeshId]=v.MeshId
+        elseif v:IsA("Union")then
+            curdata.Union[v.AssetId]=v.AssetId
+        end
+    end
+    local matches={}
+    for i,v in pairs(weapondata)do
+        for i2,c in pairs(v)do
+            for _,x in pairs(c)do
+                if x==curdata[i2][x]then
+                    if matches[i]then
+                        matches[i]=matches[i]+1
+                    else
+                        matches[i]=1
+                    end
+                end
+            end
+        end
+    end
+    local a=0
+    local closest="None"
+    for i,v in pairs(matches)do
+        if v>a then
+            a=v
+            closest=i
+        end
+    end
+    return closest
+end
+local GetEnemys=function()--simple ass get enemys
+    local players={}
+    local characters={}
+    local enemyteam
+    for _,v in pairs(game.Players:GetChildren())do
+        if v.Team~=game.Players.LocalPlayer.Team then
+            enemyteam=tostring(v.TeamColor)
+            players[#players+1]=v
+        end
+    end
+    if not enemyteam then
+        enemyteam="Bright orange"
+        if game.Players.LocalPlayer.Team.Name=="Ghosts"then
+            enemyteam="Bright blue"
+        end
+    end
+    for _,v in pairs(game.Workspace.Players[enemyteam]:GetChildren())do
+        characters[#characters+1]=v
+    end
+    return{characters,players}
+end
+local Ignore={game.Workspace.CurrentCamera,game.Workspace.Ignore}--old ignore stuff (still works lul)
+local function CanSee(Target,Penetrate,PenDepth)
+    if not Penetrate then PenDepth=0 end
+    local Dir=Target.Position-game.Workspace.CurrentCamera.CFrame.Position
+    local InitCast=game.Workspace:FindPartOnRayWithIgnoreList(Ray.new(game.Workspace.CurrentCamera.CFrame.Position,Dir),Ignore,false,true)
+    if not InitCast then
+        return true
+    end
+    local Penetrated=0
+    for _,v in pairs(game.Workspace.CurrentCamera:GetPartsObscuringTarget({Target.Position},Ignore))do
+        if v.CanCollide and v.Transparency~=1 and v.Name~="Window"then
+            local MaxExtent=v.Size.Magnitude*Dir.Unit;
+            local _,Enter=game.Workspace:FindPartOnRayWithWhitelist(Ray.new(game.Workspace.CurrentCamera.CFrame.Position,Dir),{v},true)
+            local _,Exit=game.Workspace:FindPartOnRayWithWhitelist(Ray.new(Enter+MaxExtent,-MaxExtent),{v},true)
+            local Depth=(Exit-Enter).Magnitude;
+            if Depth>PenDepth then
+                return false;
+            else
+                Penetrated=Penetrated+Depth;
+            end
+        else
+            table.insert(Ignore,v)
+        end
+    end
+    return Penetrated<PenDepth
+end
+local pos0=Instance.new("Part")--add a new part at the center of the map for later 
+pos0.Parent=game.Workspace
+pos0.CanCollide=false
+pos0.Transparency=1
+pos0.Anchored=true
+local target
+game.RunService.RenderStepped:Connect(function()
+    target=nil
+    if _G.KnifeAura.Enabled and IsAlive()then--are we alive and enabled?
+        local a=_G.KnifeAura.Range--distance check
+        for _,v in pairs(GetEnemys()[1])do--get characters
+            local main=v.Torso--we use torso because its the center of objects
+            local mainmag=(game.Workspace.CurrentCamera.CFrame.Position-main.Position).Magnitude
+            if mainmag<a and CanSee(main,false,0)then--due to the method we are using we cannot wallbang with a knife
+                a=mainmag
+                target=main
+            end
+        end
+    end
+end)
+local istyping=false--auto stab bs
+game.UserInputService.InputBegan:Connect(function(_,typing)
+    istyping=typing
+end)
+game.UserInputService.InputEnded:Connect(function(_,typing)
+    istyping=typing
+end)
+coroutine.wrap(function()
+    while wait()do
+        if _G.KnifeAura.Enabled then
+            pcall(function()
+                repeat game.RunService.RenderStepped:Wait()until IsAlive()and GetKnifeName()~="None"--wait until we are alive and have a knife
+                if game.Workspace.CurrentCamera.Main:FindFirstChild("Handle")then--is it REALLY a knife?
+                    game.Workspace.CurrentCamera.Main.Handle.Motor6D.Changed:Connect(function()--everytime it is moved we execute epic code
+                        if _G.KnifeAura.Enabled and target then
+                            game.Workspace.CurrentCamera.Main.Handle.Motor6D.Part0=pos0--set the part origin to the pos0 origin (0,0,0)
+                            game.Workspace.CurrentCamera.Main.Handle.Motor6D.C0=target.CFrame*--now we can safly move the knife without worrying about inverse cframes and bs
+                            CFrame.Angles(math.rad(math.random(-360,360)),math.rad(math.random(-360,360)),math.rad(math.random(-360,360)))--hack and slash until we hit the enemy
+                        end
+                    end)
+                end
+                repeat wait()until not IsAlive()--wait until we die to reexecute the handle hook
+            end)
+        end
+    end
+end)()
+coroutine.wrap(function()
+    while wait()do
+        if _G.KnifeAura.Enabled and _G.KnifeAura.Auto_Stab then--auto stab
+            pcall(function()
+                if target and iswindowactive()and not istyping then--are we in roblox and able to stab !??!?!?!1/1/?!?1?!?!
+                    keypress(70)--70=f
+                    wait()--we press f because it auto switches and also stabs even if u already have it equipped
+                    keyrelease(70)--unpress f
+                end
+            end)
+        end
+    end
+end)()
